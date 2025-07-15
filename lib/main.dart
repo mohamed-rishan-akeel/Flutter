@@ -52,18 +52,23 @@ class _MyHomePageState extends State<MyHomePage> {
                       return ListView.builder(
                         itemCount: devices.length,
                         itemBuilder: (context, index) {
-                          final device = devices[index];
-                          return Card(
-                            child: ListTile(
-                              title: Text(device.device.name.isNotEmpty
-                                  ? device.device.name
-                                  : "Unknown Device"),
-                              subtitle: Text(device.device.remoteId.str),
-                              trailing: Text("${device.rssi} dBm"),
-                              onTap: () => controller.connectToDevice(device.device),
-                            ),
-                          );
-                        },
+  final device = devices[index];
+  final name = device.advertisementData.localName.isNotEmpty
+      ? device.advertisementData.localName
+      : (device.device.platformName.isNotEmpty
+          ? device.device.platformName
+          : "Unknown Device");
+
+  return Card(
+    child: ListTile(
+      title: Text(name),
+      subtitle: Text(device.device.remoteId.str),
+      trailing: Text("${device.rssi} dBm"),
+      onTap: () => controller.connectToDevice(device.device),
+    ),
+  );
+},
+
                       );
                     } else {
                       return const Center(child: CircularProgressIndicator());
