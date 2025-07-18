@@ -1,9 +1,16 @@
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:convert'; // Needed for utf8.encode  ///
+
+
+
 
 class BleController extends GetxController {
   final RxBool _isScanning = false.obs;
+
+  late BluetoothCharacteristic txChar; ////
+  late BluetoothCharacteristic rxChar; ///
 
   Stream<List<ScanResult>> get scanResults => FlutterBluePlus.scanResults;
   bool get isScanning => _isScanning.value;
@@ -60,6 +67,8 @@ class BleController extends GetxController {
           print("🔴 Device disconnected: ${device.platformName}");
         }
       });
+
+      await discoverServices(device); ///
     } catch (e) {
       print("⚠️ Initial connection failed: $e");
 
@@ -100,4 +109,35 @@ class BleController extends GetxController {
       await connectToDevice(device);
     }
   }
+
+  ////
+  Future<void> discoverServices(BluetoothDevice device) async {
+  List<BluetoothService> services = await device.discoverServices();
+
+  for (var service in services) {
+    for (var characteristic in service.characteristics) {
+      if (characteristic.uuid.str.toLowerCase().contains("6e400003")) {
+        txChar = characteristic;
+        await txChar.setNotifyValue(true);
+        txChar.lastValueStream.listen((value) {
+          print("📥 From ESP32: ${String.fromCharCodes(value)}");
+        });
+      } else if (characteristic.uuid.str.toLowerCase().contains("6e400002")) {
+        rxChar = characteristic;
+      }
+    }
+  }
+
+  print("✅ Characteristics discovered");
+}
+
+Future<void> sendToEsp32(String message) async {
+  if (rxChar != null) {
+    await rxChar.write(utf8.encode(message));
+    print("📤 Sent to ESP32: $message");
+  } else {
+    print("⚠️ RX Characteristic not available");
+  }
+}
+
 }

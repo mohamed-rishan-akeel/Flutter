@@ -78,10 +78,17 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               const SizedBox(height: 10),
               ElevatedButton(
-                onPressed: () => controller.scanDevices(),
-                child: const Text("SCAN"),
+              onPressed: () => controller.scanDevices(),
+              child: const Text("SCAN"),
               ),
+              const SizedBox(height: 10),
+            
+              ElevatedButton(
+              onPressed: () => controller.sendToEsp32("Hello from Flutter!"),
+              child: const Text("SEND TO ESP32"),
+             ),
               const SizedBox(height: 20),
+
             ],
           );
         },
