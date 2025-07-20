@@ -32,28 +32,34 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _messageController = TextEditingController();
-  final BleController controller = Get.put(BleController()); // Ensure single instance
+  final BleController controller = Get.put(BleController()); // Single instance
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("BLE MESSENGER")),
-      body: SingleChildScrollView(
+      body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Connection status
-            Obx(() => Text(
-                  "Status: ${controller.connectionState.value}",
-                  style: TextStyle(
-                    color: controller.connectionState.value == "Connected"
-                        ? Colors.green
-                        : Colors.red,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+            Obx(() => Container(
+                  padding: const EdgeInsets.all(8.0),
+                  color: controller.connectionState.value == "Connected"
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.red.withOpacity(0.1),
+                  child: Text(
+                    "Status: ${controller.connectionState.value}",
+                    style: TextStyle(
+                      color: controller.connectionState.value == "Connected"
+                          ? Colors.green
+                          : Colors.red,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 )),
             const SizedBox(height: 16),
             // Scan button
@@ -64,7 +70,7 @@ class _MyHomePageState extends State<MyHomePage> {
             const SizedBox(height: 16),
             // Device list
             Container(
-              height: 200, // Fixed height for device list
+              height: 150,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey),
                 borderRadius: BorderRadius.circular(8),
@@ -81,8 +87,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       itemCount: devices.length,
                       itemBuilder: (context, index) {
                         final device = devices[index];
-                        final name = device.advertisementData.localName.isNotEmpty
-                            ? device.advertisementData.localName
+                        final name = device.advertisementData.advName.isNotEmpty
+                            ? device.advertisementData.advName
                             : (device.device.platformName.isNotEmpty
                                 ? device.device.platformName
                                 : "Unknown Device");
@@ -103,7 +109,7 @@ class _MyHomePageState extends State<MyHomePage> {
             const SizedBox(height: 16),
             // Received messages
             Container(
-              height: 150, // Fixed height for messages
+              height: 150,
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey),
                 borderRadius: BorderRadius.circular(8),

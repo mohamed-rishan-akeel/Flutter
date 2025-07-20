@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -39,28 +40,28 @@ class BleController extends GetxController {
     if (scanPermission.isGranted &&
         connectPermission.isGranted &&
         locationPermission.isGranted) {
-      print("🔍 Starting BLE scan...");
+      debugPrint("🔍 Starting BLE scan...");
       _isScanning.value = true;
       try {
         await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
         await Future.delayed(const Duration(seconds: 11));
         await FlutterBluePlus.stopScan();
-        print("✅ Scan completed.");
+        debugPrint("✅ Scan completed.");
       } catch (e) {
         Get.snackbar("Error", "Scan failed: $e");
-        print("⚠️ Scan error: $e");
+        debugPrint("⚠️ Scan error: $e");
       } finally {
         _isScanning.value = false;
       }
     } else {
       Get.snackbar("Error", "Required permissions not granted");
-      print("❌ Permissions denied");
+      debugPrint("❌ Permissions denied");
     }
   }
 
   /// Connect to a BLE device
   Future<void> connectToDevice(BluetoothDevice device) async {
-    print("🔌 Connecting to: ${device.platformName} (${device.remoteId.str})");
+    debugPrint("🔌 Connecting to: ${device.platformName} (${device.remoteId.str})");
     connectionState.value = "Connecting...";
 
     try {
@@ -72,18 +73,18 @@ class BleController extends GetxController {
       await device.connect(timeout: const Duration(seconds: 15), autoConnect: false);
       connectedDevice = device;
       connectionState.value = "Connected";
-      print("✅ Connected to ${device.platformName}");
+      debugPrint("✅ Connected to ${device.platformName}");
 
       device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.connected) {
           connectionState.value = "Connected";
-          print("🟢 Device connected: ${device.platformName}");
+          debugPrint("🟢 Device connected: ${device.platformName}");
         } else if (state == BluetoothConnectionState.disconnected) {
           connectionState.value = "Disconnected";
           connectedDevice = null;
           txChar = null;
           rxChar = null;
-          print("🔴 Device disconnected: ${device.platformName}");
+          debugPrint("🔴 Device disconnected: ${device.platformName}");
           Get.snackbar("Disconnected", "${device.platformName} disconnected");
         }
       });
@@ -91,7 +92,7 @@ class BleController extends GetxController {
       await discoverServices(device);
     } catch (e) {
       connectionState.value = "Disconnected";
-      print("⚠️ Connection failed: $e");
+      debugPrint("⚠️ Connection failed: $e");
       Get.snackbar("Error", "Failed to connect: $e");
     }
   }
@@ -104,36 +105,39 @@ class BleController extends GetxController {
       for (var service in services) {
         if (service.uuid.toString().toLowerCase() == serviceUUID) {
           serviceFound = true;
+          debugPrint("✅ Found service: $serviceUUID");
           for (var characteristic in service.characteristics) {
             if (characteristic.uuid.toString().toLowerCase() == txCharUUID) {
               txChar = characteristic;
               await txChar!.setNotifyValue(true);
+              debugPrint("✅ Subscribed to TX characteristic: $txCharUUID");
               txChar!.lastValueStream.listen((value) {
                 final message = String.fromCharCodes(value);
                 receivedMessages.add("ESP32: $message");
-                print("📥 From ESP32: $message");
+                debugPrint("📥 From ESP32: $message");
               }, onError: (e) {
-                print("⚠️ Notification error: $e");
+                debugPrint("⚠️ Notification error: $e");
                 Get.snackbar("Error", "Failed to receive notification: $e");
               });
             } else if (characteristic.uuid.toString().toLowerCase() == rxCharUUID) {
               rxChar = characteristic;
+              debugPrint("✅ Found RX characteristic: $rxCharUUID");
             }
           }
         }
       }
       if (!serviceFound) {
         Get.snackbar("Error", "Service $serviceUUID not found");
-        print("⚠️ Service $serviceUUID not found");
+        debugPrint("⚠️ Service $serviceUUID not found");
       } else if (txChar == null || rxChar == null) {
         Get.snackbar("Error", "Required characteristics not found");
-        print("⚠️ Characteristics not found: TX=$txChar, RX=$rxChar");
+        debugPrint("⚠️ Characteristics not found: TX=$txChar, RX=$rxChar");
       } else {
-        print("✅ Characteristics discovered");
+        debugPrint("✅ Characteristics discovered");
       }
     } catch (e) {
       Get.snackbar("Error", "Service discovery failed: $e");
-      print("⚠️ Discovery error: $e");
+      debugPrint("⚠️ Discovery error: $e");
     }
   }
 
@@ -142,15 +146,15 @@ class BleController extends GetxController {
     if (rxChar != null && connectionState.value == "Connected") {
       try {
         await rxChar!.write(utf8.encode(message));
-        print("📤 Sent to ESP32: $message");
+        debugPrint("📤 Sent to ESP32: $message");
         receivedMessages.add("You: $message"); // Show sent message in UI
       } catch (e) {
         Get.snackbar("Error", "Failed to send message: $e");
-        print("⚠️ Send error: $e");
+        debugPrint("⚠️ Send error: $e");
       }
     } else {
       Get.snackbar("Error", "Not connected or RX characteristic unavailable");
-      print("⚠️ Cannot send: RX=$rxChar, State=${connectionState.value}");
+      debugPrint("⚠️ Cannot send: RX=$rxChar, State=${connectionState.value}");
     }
   }
 }
