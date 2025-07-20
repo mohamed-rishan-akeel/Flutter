@@ -13,22 +13,32 @@ class BleController extends GetxController {
   final RxBool _isScanning = false.obs;
   final RxString connectionState = "Disconnected".obs;
   final RxList<String> receivedMessages = <String>[].obs;
+  final RxList<ScanResult> scanResults = <ScanResult>[].obs;
   BluetoothCharacteristic? txChar;
   BluetoothCharacteristic? rxChar;
   BluetoothDevice? connectedDevice;
 
-  Stream<List<ScanResult>> get scanResults => FlutterBluePlus.scanResults;
   bool get isScanning => _isScanning.value;
 
   @override
   void onInit() {
     super.onInit();
+    debugPrint("Initializing BleController");
     FlutterBluePlus.adapterState.listen((state) {
+      debugPrint("Bluetooth adapter state: $state");
       if (state != BluetoothAdapterState.on) {
-        Get.snackbar("Error", "Bluetooth is turned off");
         connectionState.value = "Disconnected";
+        throwError("Bluetooth is turned off");
       }
     });
+    FlutterBluePlus.scanResults.listen((results) {
+      scanResults.value = results;
+      debugPrint("Scan results updated: ${results.length} devices found");
+    });
+  }
+
+  void throwError(String message) {
+    debugPrint("⚠️ Error: $message");
   }
 
   /// Start scanning for BLE devices
@@ -48,14 +58,14 @@ class BleController extends GetxController {
         await FlutterBluePlus.stopScan();
         debugPrint("✅ Scan completed.");
       } catch (e) {
-        Get.snackbar("Error", "Scan failed: $e");
-        debugPrint("⚠️ Scan error: $e");
+        throwError("Scan failed: $e");
+        throw "Scan failed: $e";
       } finally {
         _isScanning.value = false;
       }
     } else {
-      Get.snackbar("Error", "Required permissions not granted");
-      debugPrint("❌ Permissions denied");
+      throwError("Required permissions not granted");
+      throw "Required permissions not granted";
     }
   }
 
@@ -76,6 +86,7 @@ class BleController extends GetxController {
       debugPrint("✅ Connected to ${device.platformName}");
 
       device.connectionState.listen((state) {
+        debugPrint("Connection state changed: $state");
         if (state == BluetoothConnectionState.connected) {
           connectionState.value = "Connected";
           debugPrint("🟢 Device connected: ${device.platformName}");
@@ -85,21 +96,21 @@ class BleController extends GetxController {
           txChar = null;
           rxChar = null;
           debugPrint("🔴 Device disconnected: ${device.platformName}");
-          Get.snackbar("Disconnected", "${device.platformName} disconnected");
         }
       });
 
       await discoverServices(device);
     } catch (e) {
       connectionState.value = "Disconnected";
-      debugPrint("⚠️ Connection failed: $e");
-      Get.snackbar("Error", "Failed to connect: $e");
+      throwError("Connection failed: $e");
+      throw "Failed to connect: $e";
     }
   }
 
   /// Discover services and characteristics
   Future<void> discoverServices(BluetoothDevice device) async {
     try {
+      debugPrint("Starting service discovery");
       List<BluetoothService> services = await device.discoverServices();
       bool serviceFound = false;
       for (var service in services) {
@@ -107,18 +118,25 @@ class BleController extends GetxController {
           serviceFound = true;
           debugPrint("✅ Found service: $serviceUUID");
           for (var characteristic in service.characteristics) {
+            debugPrint("Found characteristic: ${characteristic.uuid}");
             if (characteristic.uuid.toString().toLowerCase() == txCharUUID) {
               txChar = characteristic;
-              await txChar!.setNotifyValue(true);
-              debugPrint("✅ Subscribed to TX characteristic: $txCharUUID");
-              txChar!.lastValueStream.listen((value) {
-                final message = String.fromCharCodes(value);
-                receivedMessages.add("ESP32: $message");
-                debugPrint("📥 From ESP32: $message");
-              }, onError: (e) {
-                debugPrint("⚠️ Notification error: $e");
-                Get.snackbar("Error", "Failed to receive notification: $e");
-              });
+              try {
+                await txChar!.setNotifyValue(true);
+                debugPrint("✅ Subscribed to TX characteristic: $txCharUUID");
+                txChar!.lastValueStream.listen((value) {
+                  debugPrint("Raw notification value: $value");
+                  final message = String.fromCharCodes(value);
+                  receivedMessages.add("ESP32: $message");
+                  debugPrint("📥 From ESP32: $message");
+                }, onError: (e) {
+                  throwError("Notification error: $e");
+                  throw "Failed to receive notification: $e";
+                });
+              } catch (e) {
+                throwError("Failed to subscribe to TX characteristic: $e");
+                throw "Failed to subscribe to notifications: $e";
+              }
             } else if (characteristic.uuid.toString().toLowerCase() == rxCharUUID) {
               rxChar = characteristic;
               debugPrint("✅ Found RX characteristic: $rxCharUUID");
@@ -127,17 +145,17 @@ class BleController extends GetxController {
         }
       }
       if (!serviceFound) {
-        Get.snackbar("Error", "Service $serviceUUID not found");
-        debugPrint("⚠️ Service $serviceUUID not found");
+        throwError("Service $serviceUUID not found");
+        throw "Service $serviceUUID not found";
       } else if (txChar == null || rxChar == null) {
-        Get.snackbar("Error", "Required characteristics not found");
-        debugPrint("⚠️ Characteristics not found: TX=$txChar, RX=$rxChar");
+        throwError("Characteristics not found: TX=$txChar, RX=$rxChar");
+        throw "Required characteristics not found";
       } else {
         debugPrint("✅ Characteristics discovered");
       }
     } catch (e) {
-      Get.snackbar("Error", "Service discovery failed: $e");
-      debugPrint("⚠️ Discovery error: $e");
+      throwError("Discovery error: $e");
+      throw "Service discovery failed: $e";
     }
   }
 
@@ -149,12 +167,55 @@ class BleController extends GetxController {
         debugPrint("📤 Sent to ESP32: $message");
         receivedMessages.add("You: $message"); // Show sent message in UI
       } catch (e) {
-        Get.snackbar("Error", "Failed to send message: $e");
-        debugPrint("⚠️ Send error: $e");
+        throwError("Send error: $e");
+        throw "Failed to send message: $e";
       }
     } else {
-      Get.snackbar("Error", "Not connected or RX characteristic unavailable");
-      debugPrint("⚠️ Cannot send: RX=$rxChar, State=${connectionState.value}");
+      throwError("Cannot send: RX=$rxChar, State=${connectionState.value}");
+      throw "Not connected or RX characteristic unavailable";
     }
+  }
+
+  /// Handle message workflow: scan, connect, send
+  Future<void> handleMessage(String message, Function(String) onError) async {
+    if (connectionState.value == "Connected" && connectedDevice != null) {
+      try {
+        await sendToEsp32(message);
+      } catch (e) {
+        onError(e.toString());
+      }
+      return;
+    }
+
+    // Scan and connect to ESP32_BLE
+    try {
+      await scanDevices();
+      final devices = scanResults.value;
+      debugPrint("Devices found during auto-connect: ${devices.length}");
+      final esp32Device = devices.firstWhereOrNull(
+        (r) => r.advertisementData.advName == "ESP32_BLE",
+      );
+      if (esp32Device != null) {
+        debugPrint("Found ESP32_BLE, connecting...");
+        await connectToDevice(esp32Device.device);
+        if (connectionState.value == "Connected") {
+          await sendToEsp32(message);
+        }
+      } else {
+        onError("ESP32_BLE not found");
+        debugPrint("⚠️ ESP32_BLE not found during scan");
+      }
+    } catch (e) {
+      onError(e.toString());
+    }
+  }
+}
+
+extension FirstWhereOrNullExtension<E> on Iterable<E> {
+  E? firstWhereOrNull(bool Function(E) test) {
+    for (E element in this) {
+      if (test(element)) return element;
+    }
+    return null;
   }
 }
